@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for creating an EC2 instance with ALB, Auto Scaling Group, and Git clone.
+
+Parameters:
+  KeyName:
+    Description: Name of the EC2 Key Pair for SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "test"
+
+  VPC:
+    Description: VPC for the resources
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-00e0a506e346cd668
+
+  Subnet:
+    Description: Subnet for the resources
+    Type: AWS::EC2::Subnet::Id
+    AllowedValues:
+      - "subnet-009053380b68eca49"
+      - "subnet-01e9ec080ed445e77"
+      - "subnet-091b56ee214f3d6a6"
+
+  GitHubRepoURL:
+    Description: URL of the public Git repository with the website template
+    Type: String
+    Default: https://github.com/abhisran/web_temp.git
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and HTTP access
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - CidrIp: '0.0.0.0/0'
+          FromPort: 22
+          ToPort: 22
+          IpProtocol: tcp
+        - CidrIp: '0.0.0.0/0'
+          FromPort: 80
+          ToPort: 80
+          IpProtocol: tcp
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      SecurityGroups:
+        - !Ref SecurityGroup
+      KeyName: !Ref KeyName
+      SubnetId: !Ref Subnet
+      ImageId: ami-051f7e7f6c2f40dc1
+      UserData:
+        Fn::Base64:
+          Fn::Sub: |
+            #!/bin/bash -ex
+            yum update -y
+            yum install -y httpd git
+            systemctl start httpd
+            systemctl enable httpd
+            git clone ${GitHubRepoURL} /var/www/html
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: MyALB
+      Subnets:
+        - !Ref Subnet
+      SecurityGroups:
+        - !GetAtt SecurityGroup.GroupId
+      Scheme: internet-facing
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: MyTargetGroup
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: 200
+            ContentType: text/plain
+            ContentBody: "OK"
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultTargetGroupArn: !Ref TargetGroup
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: MyLaunchTemplate
+      VersionDescription: Initial version
+      LaunchTemplateData:
+        InstanceType: t2.micro
+        SecurityGroupIds:
+          - !GetAtt SecurityGroup.GroupId
+        KeyName: !Ref KeyName
+        UserData:
+          Fn::Base64:
+            Fn::Sub: |
+              #!/bin/bash -ex
+              yum update -y
+              yum install -y httpd git
+              systemctl start httpd
+              systemctl enable httpd
+              git clone ${GitHubRepoURL} /var/www/html
+
+Outputs:
+  WebsiteURL:
+    Description: URL of the website hosted on the ALB
+    Value: !Sub "http://${ALB.DNSName}/"
