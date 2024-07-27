@@ -1,0 +1,39 @@
+# write a cloudformation template to power up scalable web servers using load balancers and autoscaling 
+
+AWSTemplateFormatVersion: '2010-09-09'  # version of the cloudformation template 
+
+Parameters: 
+  InstanceType: 
+    Type: AWS::EC2::Instance::InstanceType
+    Default: t2.micro
+  MinInstances: 
+    Type: Number
+    Default: 1 
+  MaxInstances: 
+    Type: Number
+    Default: 3
+  HealthCheckGracePeriod: 
+    Type: Number
+    Default: 300
+  AutoScaleMin: 
+    Type: Number
+    Default: 1
+  AutoScaleMax: 
+    Type: Number
+    Default: 3
+  AutoScaleDesired: 
+    Type: Number
+    Default: 2 
+
+Resources: 
+  WebServer: 
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties: 
+      AutoScalingGroupName: WebServer
+      LaunchConfigurationName: WebServer
+      MinSize: !Ref MinInstances
+      MaxSize: !Ref MaxInstances
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: !Ref HealthCheckGracePeriod
+      LoadBalancerNames: 
+        - WebServerALB 
